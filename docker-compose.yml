@@ -1,5 +1,11 @@
 version: '3.8'
 
+# IMPORTANT: Before running in production:
+# 1. Create apps/backend/.env with secure JWT secrets
+# 2. Use strong database passwords
+# 3. Configure proper domain names and SSL
+# See DEPLOYMENT.md for production setup guide
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -36,14 +42,14 @@ services:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: saas-backend
+    env_file:
+      - ./apps/backend/.env
     environment:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://postgres:password@postgres:5432/saas_db?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
-      JWT_REFRESH_SECRET: your-super-secret-refresh-key-change-in-production
       FRONTEND_URL: http://localhost:3000
     ports:
       - "4000:4000"

@@ -83,7 +83,9 @@ export class AuthService {
 
   async refreshToken(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken);
+      const payload = this.jwtService.verify(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET || 'jwt-refresh-secret',
+      });
       const session = await this.prisma.session.findUnique({
         where: { refreshToken },
       });
@@ -118,13 +120,21 @@ export class AuthService {
   private async generateTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
 
+    // Ensure secrets are set, fail fast if not
+    const jwtSecret = process.env.JWT_SECRET;
+    const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
+
+    if (!jwtSecret || !jwtRefreshSecret) {
+      throw new Error('JWT secrets must be configured. Please set JWT_SECRET and JWT_REFRESH_SECRET environment variables.');
+    }
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: process.env.JWT_SECRET || 'jwt-secret',
+        secret: jwtSecret,
         expiresIn: '15m',
       }),
       this.jwtService.signAsync(payload, {
-        secret: process.env.JWT_REFRESH_SECRET || 'jwt-refresh-secret',
+        secret: jwtRefreshSecret,
         expiresIn: '7d',
       }),
     ]);

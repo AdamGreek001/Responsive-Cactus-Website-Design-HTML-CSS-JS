@@ -146,11 +146,25 @@ export class InvoicesService {
   }
 
   async updateStatus(id: string, status: InvoiceStatus) {
+    // Get current invoice to check existing timestamps
+    const currentInvoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      select: { sentAt: true, paidAt: true },
+    });
+
+    if (!currentInvoice) {
+      throw new NotFoundException(`Invoice with ID ${id} not found`);
+    }
+
     const updateData: any = { status };
 
-    if (status === 'SENT' && !updateData.sentAt) {
+    // Only set sentAt if not already set
+    if (status === 'SENT' && !currentInvoice.sentAt) {
       updateData.sentAt = new Date();
-    } else if (status === 'PAID' && !updateData.paidAt) {
+    }
+    
+    // Only set paidAt if not already set
+    if (status === 'PAID' && !currentInvoice.paidAt) {
       updateData.paidAt = new Date();
     }
 
