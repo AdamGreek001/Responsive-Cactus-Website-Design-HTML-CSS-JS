@@ -1,0 +1,416 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  CLIENT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PAYPAL
+  PAYTM
+  CASH
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  EMAIL
+  IN_APP
+  PUSH
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          UserRole  @default(CLIENT)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  client        Client?
+  sessions      Session[]
+  notifications Notification[]
+  assignedTickets Ticket[] @relation("AssignedTo")
+  auditLogs     AuditLog[]
+  
+  @@map("users")
+}
+
+model Client {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  company         String?
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
+  taxId           String?
+  billingEmail    String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices        Invoice[]
+  payments        Payment[]
+  subscriptions   Subscription[]
+  tickets         Ticket[]
+  contracts       Contract[]
+  files           File[]
+  folders         Folder[]
+  
+  @@map("clients")
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  clientId        String
+  status          InvoiceStatus @default(DRAFT)
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime
+  subtotal        Float         @default(0)
+  taxRate         Float         @default(0)
+  taxAmount       Float         @default(0)
+  discount        Float         @default(0)
+  total           Float         @default(0)
+  notes           String?
+  terms           String?
+  pdfUrl          String?
+  sentAt          DateTime?
+  viewedAt        DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  items           InvoiceItem[]
+  payments        Payment[]
+  
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float
+  amount      Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  @@map("invoice_items")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  clientId          String
+  invoiceId         String?
+  amount            Float
+  method            PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  transactionId     String?
+  transactionData   Json?
+  paymentDate       DateTime      @default(now())
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  client            Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+  
+  @@map("payments")
+}
+
+model Subscription {
+  id                String              @id @default(cuid())
+  clientId          String
+  planName          String
+  planDescription   String?
+  amount            Float
+  currency          String              @default("USD")
+  billingCycle      String              // "monthly" or "yearly"
+  status            SubscriptionStatus  @default(ACTIVE)
+  startDate         DateTime            @default(now())
+  endDate           DateTime?
+  nextBillingDate   DateTime?
+  stripeSubscriptionId String?
+  paypalSubscriptionId String?
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relations
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@map("subscriptions")
+}
+
+model Ticket {
+  id          String         @id @default(cuid())
+  clientId    String
+  assignedToId String?
+  subject     String
+  description String
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  // Relations
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedTo  User?          @relation("AssignedTo", fields: [assignedToId], references: [id])
+  messages    TicketMessage[]
+  files       File[]         @relation("TicketFiles")
+  
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id          String   @id @default(cuid())
+  ticketId    String
+  senderId    String?
+  message     String
+  isInternal  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  
+  @@map("ticket_messages")
+}
+
+model KnowledgeCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  articles    KnowledgeArticle[]
+  
+  @@map("knowledge_categories")
+}
+
+model KnowledgeArticle {
+  id          String            @id @default(cuid())
+  categoryId  String
+  title       String
+  slug        String            @unique
+  content     String
+  excerpt     String?
+  isPublic    Boolean           @default(true)
+  viewCount   Int               @default(0)
+  helpful     Int               @default(0)
+  notHelpful  Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  // Relations
+  category    KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@map("knowledge_articles")
+}
+
+model Contract {
+  id              String         @id @default(cuid())
+  clientId        String
+  title           String
+  content         String
+  status          ContractStatus @default(DRAFT)
+  pdfUrl          String?
+  sentAt          DateTime?
+  signedAt        DateTime?
+  signedByClient  Boolean        @default(false)
+  signatureData   String?
+  expiresAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  // Relations
+  client          Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  @@map("contracts")
+}
+
+model Folder {
+  id          String   @id @default(cuid())
+  clientId    String?
+  name        String
+  parentId    String?
+  path        String
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children    Folder[] @relation("FolderHierarchy")
+  files       File[]
+  
+  @@map("folders")
+}
+
+model File {
+  id          String   @id @default(cuid())
+  clientId    String?
+  folderId    String?
+  ticketId    String?
+  name        String
+  originalName String
+  path        String
+  url         String
+  mimeType    String
+  size        Int
+  version     Int      @default(1)
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  folder      Folder?  @relation(fields: [folderId], references: [id])
+  ticket      Ticket?  @relation("TicketFiles", fields: [ticketId], references: [id])
+  
+  @@map("files")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  
+  // Relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String?  @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  entity      String
+  entityId    String
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String   // "stripe", "paypal", etc.
+  eventType   String
+  payload     Json
+  processed   Boolean  @default(false)
+  error       String?
+  createdAt   DateTime @default(now())
+  processedAt DateTime?
+  
+  @@map("webhook_events")
+}

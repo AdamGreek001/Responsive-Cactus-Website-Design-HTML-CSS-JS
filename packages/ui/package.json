@@ -1,0 +1,14 @@
+{
+  "name": "@saas-platform/ui",
+  "version": "1.0.0",
+  "main": "./index.tsx",
+  "types": "./index.tsx",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.46",
+    "typescript": "^5.3.3"
+  }
+}
